@@ -45,13 +45,13 @@ pip install git+https://github.com/Aradhya0510/databricks-mlflow-utils.git
 Here's how you can use the package to convert an existing MLflow model:
 
 ```python
-from your_package_name.converter import ConvertToPyFuncForProbability
+from databricks_mlflow_utils import get_probabilities
 
 # Replace with your actual model URI
 model_uri = "runs:/<run_id>/model"
 
 # Create an instance of the converter
-converter = ConvertToPyFuncForProbability(model_uri)
+converter = get_probabilities.ConvertToPyFuncForProbability(model_uri)
 
 # Perform the conversion
 result = converter.convert()
