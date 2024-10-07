@@ -88,11 +88,14 @@ This class ensures that the dependencies required by the model are consistent wi
 
 When using Databricks AutoML, the best run models are logged in MLflow but return only predictions by default. In many cases, especially in classification tasks, you need both the predicted classes and the probabilities for each class to make informed decisions.
 
-Manually modifying the logged model to include probabilities involves:
+Manually modifying the logged model to include probabilities involves several complex steps:
 
-- Adjusting the model's `predict` method.
-- Ensuring that all dependencies and the environment remain consistent.
-- Handling potential version conflicts and compatibility issues.
+Creating a PyFunc Wrapper: You need to write a custom Python function (pyfunc) wrapper that modifies the predict method to return both predictions and probabilities.
+Re-logging the Model with Updated Artifacts: After wrapping, you must re-log the model to MLflow, ensuring that all artifacts are correctly updated.
+Ensuring Dependency Consistency: The environment in which the model was trained may have specific versions of libraries. You need to replicate this environment to avoid compatibility issues.
+Handling Version Conflicts: Different versions of libraries (e.g., scikit-learn, pandas) can lead to runtime errors if not properly managed.
+Advanced MLflow Manipulations: Modifying and repackaging MLflow models requires a deep understanding of MLflow's APIs and best practices.
+Potential Slowdowns in Productionization: For users unfamiliar with these advanced concepts, the process can be time-consuming and may delay the deployment of models to production.
 
 This package automates the entire process:
 
