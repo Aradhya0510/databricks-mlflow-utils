@@ -4,7 +4,7 @@ from mlflow.models import infer_signature
 import pandas as pd
 import mlflow.pyfunc
 
-from dependency_checker import DependencyChecker
+from databricks_mlflow_utils.dependency_checker import DependencyChecker
 
 class PyFuncWrapper(mlflow.pyfunc.PythonModel):
     def load_context(self, context):
