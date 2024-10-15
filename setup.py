@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='your-package-name',  # Replace with your package name
+    name='databricks-mlflow-utils',  # Replace with your package name
     version='0.1.0',
     author='Aradhya Chouhan',
     author_email='aradhya0510@gmail.com',
@@ -14,6 +14,8 @@ setup(
         'mlflow',
         'pandas',
         'scikit-learn',
+        'shap',
+        'lime',
         # Add other dependencies here
     ],
     classifiers=[
