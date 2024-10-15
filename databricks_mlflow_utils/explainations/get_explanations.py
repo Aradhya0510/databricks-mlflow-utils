@@ -30,15 +30,27 @@ class PyFuncWrapper(mlflow.pyfunc.PythonModel):
         else:
             self.model = mlflow.pyfunc.load_model(model_uri)
 
-        # Load the explainer using mlflow.shap
+        # Load the explainer using mlflow.shap or mlflow.artifacts
+        self.explainer_type = context.artifacts["explainer_type"]
         explainer_uri = context.artifacts["explainer_uri"]
-        self.explainer = mlflow.shap.load_explainer(explainer_uri)
-        
+
+        if self.explainer_type == 'shap':
+            import mlflow.shap
+            self.explainer = mlflow.shap.load_explainer(explainer_uri)
+        elif self.explainer_type == 'lime':
+            import pickle
+            explainer_path = mlflow.artifacts.download_artifacts(explainer_uri)
+            with open(explainer_path, 'rb') as f:
+                self.explainer = pickle.load(f)
+        else:
+            raise ValueError(f"Unsupported explainer type: {self.explainer_type}")
+    
     def predict(self, context, model_input):
         """
         Predict and provide explanations.
         """
         import numpy as np
+        import pandas as pd
 
         # Ensure input is a DataFrame
         if not isinstance(model_input, pd.DataFrame):
@@ -47,43 +59,39 @@ class PyFuncWrapper(mlflow.pyfunc.PythonModel):
         # Make predictions
         predictions = self.model.predict(model_input)
 
-        # Get SHAP values
-        shap_values = self.explainer.shap_values(model_input)
-
-        # Handle multiclass classification (shap_values is a list of arrays)
-        if isinstance(shap_values, list) and all(isinstance(sv, np.ndarray) for sv in shap_values):
-            shap_values_serializable = [sv.tolist() for sv in shap_values]
+        # Generate explanations
+        if self.explainer_type == 'shap':
+            shap_values = self.explainer.shap_values(model_input)
+            # Serialize shap_values as before
+            explanations = self.serialize_shap_values(shap_values)
+        elif self.explainer_type == 'lime':
+            # LIME explains individual predictions
+            explanations = []
+            for i in range(len(model_input)):
+                explanation = self.explainer.explain_instance(
+                    data_row=model_input.iloc[i].values,
+                    predict_fn=self.model.predict_proba if hasattr(self.model, 'predict_proba') else self.model.predict,
+                    num_features=model_input.shape[1]
+                )
+                explanations.append(explanation.as_list())
         else:
-            shap_values_serializable = shap_values.tolist()
+            raise ValueError(f"Unsupported explainer type: {self.explainer_type}")
 
-        # Return predictions and explanations as a DataFrame
+        # Return predictions and explanations
         frame = pd.DataFrame({
             "predictions": predictions,
-            "shap_values": [shap_values_serializable] * len(predictions)  # Repeat for each prediction
+            "explanations": explanations
         })
         return frame
 
+    def serialize_shap_values(self, shap_values):
+        import numpy as np
+        # Handle serialization as before
+        if isinstance(shap_values, list) and all(isinstance(sv, np.ndarray) for sv in shap_values):
+            return [sv.tolist() for sv in shap_values]
+        else:
+            return shap_values.tolist()
 
-    def predict(self, context, model_input):
-        """
-        Predict and provide explanations.
-        """
-        # Ensure input is a DataFrame
-        if not isinstance(model_input, pd.DataFrame):
-            model_input = pd.DataFrame(model_input)
-
-        # Make predictions
-        predictions = self.model.predict(model_input)
-
-        # Get SHAP values
-        shap_values = self.explainer.shap_values(model_input)
-
-        # Return predictions and explanations as a DataFrame
-        frame = pd.DataFrame({
-            "predictions": predictions,
-            "shap_values": [list(sv) for sv in shap_values]  # Convert to list for serialization
-        })
-        return frame
 
 class ConvertToPyFuncForExplanation():
     def __init__(self, model_uri, explainer_type='shap'):
