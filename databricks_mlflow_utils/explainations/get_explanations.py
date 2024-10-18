@@ -2,6 +2,7 @@ import mlflow
 import pandas as pd
 import mlflow.pyfunc
 import os
+import json
 
 from databricks_mlflow_utils.dependency_checker import DependencyChecker
 
@@ -12,6 +13,7 @@ class PyFuncWrapper(mlflow.pyfunc.PythonModel):
         """
         import mlflow
         import shap
+        import dill
 
         # Load the model from the logged model
         model_flavor = context.artifacts["model_flavor"]
@@ -30,21 +32,22 @@ class PyFuncWrapper(mlflow.pyfunc.PythonModel):
         else:
             self.model = mlflow.pyfunc.load_model(model_uri)
 
-        # Load the explainer using mlflow.shap or mlflow.artifacts
+        # Load the explainer
         self.explainer_type = context.artifacts["explainer_type"]
         explainer_uri = context.artifacts["explainer_uri"]
 
+        explainer_path = mlflow.artifacts.download_artifacts(explainer_uri)
         if self.explainer_type == 'shap':
-            import mlflow.shap
-            self.explainer = mlflow.shap.load_explainer(explainer_uri)
+            # Load SHAP explainer using shap.Explainer.load
+            self.explainer = shap.Explainer.load(explainer_path)
         elif self.explainer_type == 'lime':
-            import pickle
-            explainer_path = mlflow.artifacts.download_artifacts(explainer_uri)
+            # Load LIME explainer using dill
+            import dill
             with open(explainer_path, 'rb') as f:
-                self.explainer = pickle.load(f)
+                self.explainer = dill.load(f)
         else:
             raise ValueError(f"Unsupported explainer type: {self.explainer_type}")
-    
+
     def predict(self, context, model_input):
         """
         Predict and provide explanations.
@@ -61,9 +64,9 @@ class PyFuncWrapper(mlflow.pyfunc.PythonModel):
 
         # Generate explanations
         if self.explainer_type == 'shap':
-            shap_values = self.explainer.shap_values(model_input)
-            # Serialize shap_values as before
-            explanations = self.serialize_shap_values(shap_values)
+            shap_values = self.explainer(model_input)
+            # Serialize shap_values
+            explanations = self.serialize_shap_values(shap_values.values)
         elif self.explainer_type == 'lime':
             # LIME explains individual predictions
             explanations = []
@@ -86,12 +89,13 @@ class PyFuncWrapper(mlflow.pyfunc.PythonModel):
 
     def serialize_shap_values(self, shap_values):
         import numpy as np
-        # Handle serialization as before
-        if isinstance(shap_values, list) and all(isinstance(sv, np.ndarray) for sv in shap_values):
-            return [sv.tolist() for sv in shap_values]
-        else:
+        # Handle serialization
+        if isinstance(shap_values, list):
+            return [self.serialize_shap_values(sv) for sv in shap_values]
+        elif isinstance(shap_values, np.ndarray):
             return shap_values.tolist()
-
+        else:
+            return shap_values
 
 class ConvertToPyFuncForExplanation():
     def __init__(self, model_uri, explainer_type='shap'):
@@ -173,7 +177,6 @@ class ConvertToPyFuncForExplanation():
         # For example, check if model has 'predict_proba' method
         return not hasattr(self.model, 'predict_proba')
 
-    
     def create_shap_explainer(self, data):
         import shap
         # Ensure data is a DataFrame
@@ -182,15 +185,13 @@ class ConvertToPyFuncForExplanation():
 
         # Create the appropriate explainer based on model flavor
         if self.model_flavor == 'sklearn':
-            self.explainer = shap.KernelExplainer(self.model.predict, data)
+            self.explainer = shap.Explainer(self.model.predict, data)
         elif self.model_flavor in ['xgboost', 'lightgbm']:
-            self.explainer = shap.TreeExplainer(self.model)
-        elif self.model_flavor == 'tensorflow':
-            self.explainer = shap.DeepExplainer(self.model, data)
-        elif self.model_flavor == 'pytorch':
+            self.explainer = shap.Explainer(self.model)
+        elif self.model_flavor in ['tensorflow', 'pytorch']:
             self.explainer = shap.DeepExplainer(self.model, data)
         else:
-            self.explainer = shap.KernelExplainer(self.model.predict, data)
+            self.explainer = shap.Explainer(self.model.predict, data)
 
     def get_signature(self):
         # Use the input example or raise an error if not available
@@ -199,12 +200,36 @@ class ConvertToPyFuncForExplanation():
         input_example = self.input_example
         predictions = self.model.predict(input_example)
         # Generate a sample explanation
-        shap_values = self.explainer.shap_values(input_example)
+        if self.explainer_type == 'shap':
+            shap_values = self.explainer(input_example).values
+            explanations = self.serialize_shap_values(shap_values)
+        elif self.explainer_type == 'lime':
+            explanations = []
+            for i in range(len(input_example)):
+                explanation = self.explainer.explain_instance(
+                    data_row=input_example.iloc[i].values,
+                    predict_fn=self.model.predict_proba if hasattr(self.model, 'predict_proba') else self.model.predict,
+                    num_features=input_example.shape[1]
+                )
+                explanations.append(explanation.as_list())
+        else:
+            raise ValueError(f"Unsupported explainer type: {self.explainer_type}")
+
         output = pd.DataFrame({
             "predictions": predictions,
-            "shap_values": [list(sv) for sv in shap_values]
+            "explanations": explanations
         })
-        return mlflow.infer_signature(input_example, output)
+        return mlflow.models.infer_signature(input_example, output)
+
+    def serialize_shap_values(self, shap_values):
+        import numpy as np
+        # Handle serialization
+        if isinstance(shap_values, list):
+            return [self.serialize_shap_values(sv) for sv in shap_values]
+        elif isinstance(shap_values, np.ndarray):
+            return shap_values.tolist()
+        else:
+            return shap_values
 
     def get_experiment_id(self):
         client = mlflow.MlflowClient()
@@ -219,10 +244,10 @@ class ConvertToPyFuncForExplanation():
 
         import os
         import mlflow
-        import databricks_mlflow_utils
+        import dill
 
         # Get the module path dynamically
-        module_path = os.path.abspath(databricks_mlflow_utils.__file__)
+        module_path = os.path.abspath(__file__)
 
         # If the module is part of a package, use the directory
         if os.path.basename(module_path) == "__init__.py":
@@ -232,21 +257,23 @@ class ConvertToPyFuncForExplanation():
             # Module is a single file
             code_paths = [module_path]
 
-
         with mlflow.start_run(experiment_id=self.get_experiment_id()) as mlflow_run:
             # Log the explainer
             if self.explainer_type == 'shap':
-                explainer_artifact_path = "explainer"
-                mlflow.shap.log_explainer(self.explainer, explainer_artifact_path)
-                explainer_uri = f"runs:/{mlflow_run.info.run_id}/{explainer_artifact_path}"
-            elif self.explainer_type == 'lime':
-                explainer_artifact_path = "lime_explainer.pkl"
-                # Save the LIME explainer manually
-                import pickle
-                with open(explainer_artifact_path, 'wb') as f:
-                    pickle.dump(self.explainer, f)
+                explainer_artifact_path = "shap_explainer.pkl"
+                # Save the SHAP explainer using built-in save method
+                self.explainer.save(explainer_artifact_path)
                 mlflow.log_artifact(explainer_artifact_path, artifact_path="explainer")
                 explainer_uri = f"runs:/{mlflow_run.info.run_id}/explainer/{explainer_artifact_path}"
+            elif self.explainer_type == 'lime':
+                explainer_artifact_path = "lime_explainer.pkl"
+                # Save the LIME explainer using dill
+                with open(explainer_artifact_path, 'wb') as f:
+                    dill.dump(self.explainer, f)
+                mlflow.log_artifact(explainer_artifact_path, artifact_path="explainer")
+                explainer_uri = f"runs:/{mlflow_run.info.run_id}/explainer/{explainer_artifact_path}"
+            else:
+                raise ValueError(f"Unsupported explainer type: {self.explainer_type}")
 
             # Define artifacts
             artifacts = {
@@ -258,12 +285,13 @@ class ConvertToPyFuncForExplanation():
 
             # Retrieve the pip requirements
             pip_requirements = mlflow.pyfunc.get_model_dependencies(self.model_uri)
-            # Add SHAP to the requirements if not already present
-            if 'shap' not in pip_requirements:
+            # Add SHAP or LIME to the requirements if not already present
+            if self.explainer_type == 'shap' and 'shap' not in pip_requirements:
                 pip_requirements.append('shap')
-            # Update pip requirements
-            if self.explainer_type == 'lime':
+            if self.explainer_type == 'lime' and 'lime' not in pip_requirements:
                 pip_requirements.append('lime')
+            if 'dill' not in pip_requirements:
+                pip_requirements.append('dill')
 
             # Log the PyFunc model
             mlflow.pyfunc.log_model(
@@ -275,6 +303,6 @@ class ConvertToPyFuncForExplanation():
                 pip_requirements=pip_requirements,
                 code_path=code_paths
             )
-            
+
         print("Model converted successfully")
         return {"converted_model_uri": f"runs:/{mlflow_run.info.run_id}/pyfunc_model_with_explanation"}
