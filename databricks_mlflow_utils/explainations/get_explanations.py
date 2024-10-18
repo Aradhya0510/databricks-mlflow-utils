@@ -289,8 +289,8 @@ class ConvertToPyFuncForExplanation():
             if isinstance(pip_requirements, str):
                 # It's a path to a file
                 with open(pip_requirements, 'r') as f:
-                    requirements = f.readlines()
-                requirements = [line.strip() for line in requirements if line.strip()]
+                    pip_requirements = f.readlines()
+                pip_requirements = [line.strip() for line in pip_requirements if line.strip()]
             
             # Add SHAP or LIME to the requirements if not already present
             if self.explainer_type == 'shap' and 'shap' not in pip_requirements:
