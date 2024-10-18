@@ -291,11 +291,6 @@ class ConvertToPyFuncForExplanation():
                 with open(pip_requirements, 'r') as f:
                     requirements = f.readlines()
                 requirements = [line.strip() for line in requirements if line.strip()]
-                return requirements
-            elif isinstance(pip_requirements, list):
-                return pip_requirements
-            else:
-                return []
             
             # Add SHAP or LIME to the requirements if not already present
             if self.explainer_type == 'shap' and 'shap' not in pip_requirements:
