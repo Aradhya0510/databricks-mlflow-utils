@@ -283,8 +283,20 @@ class ConvertToPyFuncForExplanation():
                 "explainer_type": self.explainer_type
             }
 
-            # Retrieve the pip requirements
+            # Retrieve the pip requirements from the model
             pip_requirements = mlflow.pyfunc.get_model_dependencies(self.model_uri)
+            # Check if pip_requirements is a path to a file
+            if isinstance(pip_requirements, str):
+                # It's a path to a file
+                with open(pip_requirements, 'r') as f:
+                    requirements = f.readlines()
+                requirements = [line.strip() for line in requirements if line.strip()]
+                return requirements
+            elif isinstance(pip_requirements, list):
+                return pip_requirements
+            else:
+                return []
+            
             # Add SHAP or LIME to the requirements if not already present
             if self.explainer_type == 'shap' and 'shap' not in pip_requirements:
                 pip_requirements.append('shap')
