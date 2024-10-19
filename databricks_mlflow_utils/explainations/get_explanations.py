@@ -39,7 +39,8 @@ class PyFuncWrapper(mlflow.pyfunc.PythonModel):
         explainer_path = mlflow.artifacts.download_artifacts(explainer_uri)
         if self.explainer_type == 'shap':
             # Load SHAP explainer using shap.Explainer.load
-            self.explainer = shap.Explainer.load(explainer_path)
+            # self.explainer = shap.Explainer.load(explainer_path)
+            self.explainer = mlflow.shap.load_explainer(explainer_uri)
         elif self.explainer_type == 'lime':
             # Load LIME explainer using dill
             import dill
@@ -260,11 +261,13 @@ class ConvertToPyFuncForExplanation():
         with mlflow.start_run(experiment_id=self.get_experiment_id()) as mlflow_run:
             # Log the explainer
             if self.explainer_type == 'shap':
-                explainer_artifact_path = "shap_explainer.pkl"
-                # Save the SHAP explainer using built-in save method
-                self.explainer.save(explainer_artifact_path)
-                mlflow.log_artifact(explainer_artifact_path, artifact_path="explainer")
-                explainer_uri = f"runs:/{mlflow_run.info.run_id}/explainer/{explainer_artifact_path}"
+                # explainer_artifact_path = "shap_explainer.pkl"
+                # # Save the SHAP explainer using built-in save method
+                # self.explainer.save(explainer_artifact_path)
+                # mlflow.log_artifact(explainer_artifact_path, artifact_path="explainer")
+                explainer_artifact_path = "explainer"
+                mlflow.shap.log_explainer(self.explainer, explainer_artifact_path)
+                explainer_uri = f"runs:/{mlflow_run.info.run_id}/{explainer_artifact_path}"
             elif self.explainer_type == 'lime':
                 explainer_artifact_path = "lime_explainer.pkl"
                 # Save the LIME explainer using dill
