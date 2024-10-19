@@ -186,7 +186,7 @@ class ConvertToPyFuncForExplanation():
 
         # Create the appropriate explainer based on model flavor
         if self.model_flavor == 'sklearn':
-            self.explainer = shap.Explainer(self.model.predict, data)
+            self.explainer = shap.Explainer(self.model.predict, data, algorithm='permutation')
         elif self.model_flavor in ['xgboost', 'lightgbm']:
             self.explainer = shap.Explainer(self.model)
         elif self.model_flavor in ['tensorflow', 'pytorch']:
