@@ -268,6 +268,9 @@ class ConvertToPyFuncForExplanation():
                 # self.explainer.save(explainer_artifact_path)
                 # mlflow.log_artifact(explainer_artifact_path, artifact_path="explainer")
                 explainer_artifact_path = "explainer"
+                # Set model and data to None to prevent serialization issues
+                self.explainer.model = None
+                self.explainer.data = None
                 mlflow.shap.log_explainer(self.explainer, explainer_artifact_path)
                 explainer_uri = f"runs:/{mlflow_run.info.run_id}/{explainer_artifact_path}"
             elif self.explainer_type == 'lime':
