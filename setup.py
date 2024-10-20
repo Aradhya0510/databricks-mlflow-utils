@@ -11,11 +11,6 @@ setup(
     url='https://github.com/Aradhya0510/databricks-mlflow-utils.git',  # Replace with your GitHub repo URL
     packages=find_packages(),
     install_requires=[
-        'mlflow',
-        'pandas',
-        'scikit-learn',
-        'shap',
-        'lime',
         # Add other dependencies here
     ],
     classifiers=[
