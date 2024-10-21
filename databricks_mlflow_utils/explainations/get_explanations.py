@@ -478,7 +478,7 @@ class ConvertToPyFuncForExplanation:
 
         # If NLE is True, generate explanations
         if self.NLE:
-            from natural_language_explainer import NaturalLanguageExplainer
+            from .natural_language_explainer import NaturalLanguageExplainer
 
             # Initialize llm_params (assuming environment variables are set)
             api_key = os.environ.get('LLM_API_KEY')
