@@ -70,22 +70,70 @@ print("Converted model URI:", result["converted_model_uri"])
 ### Convert a model to include SHAP explanations:
 
 ```python
-from databricks_mlflow_utils.explanations import get_explanations
+from databricks_mlflow_utils.explainations import get_explanations
 
-# Replace with your actual model URI
+# Assuming you have a model logged in MLflow and you have its model URI
 model_uri = "runs:/<run_id>/model"
 
 # Create an instance of the converter
 converter = get_explanations.ConvertToPyFuncForExplanation(model_uri)
 
-# Create an explainer using training data
-converter.create_explainer(training_data)
+# Inspect the model pipeline to get the expected columns
+from sklearn.pipeline import Pipeline
+from databricks.automl_runtime.sklearn.column_selector import ColumnSelector
 
-# Perform the conversion
+# Check if the model is a Pipeline
+if isinstance(converter.model, Pipeline):
+    for name, step in converter.model.named_steps.items():
+        if isinstance(step, ColumnSelector):
+            expected_columns = step.cols
+            print(f"Columns expected by the model: {expected_columns}")
+else:
+    print("Model is not a scikit-learn Pipeline.")
+
+# Prepare the dataset for the explainer
+# Define the catalog, schema, and table names
+catalog = "your_catalog"
+schema = "your_schema"
+table = "your_table"
+
+# Read the table from Unity Catalog
+spark_df = spark.read.table(f"{catalog}.{schema}.{table}")
+
+# Convert the Spark DataFrame to a Pandas DataFrame
+pandas_df = spark_df.toPandas()
+
+# Ensure the DataFrame has the expected columns
+data_for_explainer = pandas_df[expected_columns]
+
+# Ensure the DataFrame is indexed correctly
+data_for_explainer = data_for_explainer.reset_index(drop=True)
+print(f"Dataset columns: {data_for_explainer.columns.tolist()}")
+
+# Create the explainer with your dataset
+converter.create_explainer(data_for_explainer)
+
+# Now you can convert the model
 result = converter.convert()
 
-# Output the URI of the converted model with SHAP explanations
-print("Converted model with SHAP explanations URI:", result["converted_model_uri"])
+# The result contains the URI of the converted model
+converted_model_uri = result["converted_model_uri"]
+print(f"Converted model URI: {converted_model_uri}")
+
+import mlflow
+
+# Load the converted model
+wrapped_model = mlflow.pyfunc.load_model(converted_model_uri)
+
+# Prepare some input data (make sure it matches the model's expected input)
+input_data = data_for_explainer.sample(5)  # Sample 5 rows for testing
+
+# Get predictions and explanations
+output = wrapped_model.predict(input_data)
+
+print("Predictions and Explanations:")
+print(output)
+
 ```
 
 **Notes:**
