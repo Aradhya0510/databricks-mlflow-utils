@@ -1,7 +1,3 @@
-Here's an updated README incorporating the new module for explanations:
-
----
-
 # MLflow Model Converter for Predictions, Probabilities, and SHAP Explanations
 
 A Python package that simplifies the conversion of existing MLflow models to return both predictions and probabilities, along with generating SHAP explanations. It ensures consistency of model dependencies during repackaging, making it particularly useful in scenarios like Databricks AutoML, where the best run models typically return only predictions by default.
