@@ -116,7 +116,7 @@ class ConvertToPyFuncForExplanation:
     def load_input_example(self):
         try:
           # Download the model artifacts to a local path
-          local_model_path = mlflow.artifacts.download_artifacts(model_uri)
+          local_model_path = mlflow.artifacts.download_artifacts(self.model_uri)
           # Load the PyFuncModel from the local path
           pyfunc_model = mlflow.pyfunc.load_model(local_model_path)
           model_metadata = pyfunc_model.metadata
@@ -125,7 +125,8 @@ class ConvertToPyFuncForExplanation:
           if self.input_example is not None and not isinstance(self.input_example, pd.DataFrame):
               self.input_example = pd.DataFrame(self.input_example)
               
-        except Exception:
+        except Exception as e:
+            logging.warning(f"input exmaple loading failed: {e}")
             self.input_example = None
         
     def create_explainer(self, data):
