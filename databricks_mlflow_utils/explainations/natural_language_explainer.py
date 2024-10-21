@@ -2,6 +2,7 @@ import mlflow
 import pandas as pd
 import numpy as np
 import shap
+import dill
 import os
 import joblib
 
@@ -38,13 +39,13 @@ class NaturalLanguageExplainer:
         """
         # Download the artifacts to a local directory
         artifacts_path = mlflow.artifacts.download_artifacts(artifact_uri=self.model_uri)
-        explainer_path = os.path.join(artifacts_path, 'explainer', 'explainer.pkl')
-
-        if not os.path.exists(explainer_path):
-            raise FileNotFoundError(f"Explainer not found in the model artifacts at {explainer_path}")
-
-        # Load the explainer using joblib
-        explainer = joblib.load(explainer_path)
+        explainer_path = os.path.join(artifacts_path, 'explainer.dill')
+        if explainer_path:
+            with open(explainer_path, 'rb') as f:
+                explainer = dill.load(f)
+        else:
+            raise FileNotFoundError("Explainer artifact not found in the context.")
+        
         return explainer
 
     def _determine_if_regression(self):
