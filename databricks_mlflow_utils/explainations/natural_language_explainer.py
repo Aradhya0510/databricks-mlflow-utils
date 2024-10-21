@@ -39,7 +39,7 @@ class NaturalLanguageExplainer:
         """
         # Download the artifacts to a local directory
         artifacts_path = mlflow.artifacts.download_artifacts(artifact_uri=self.model_uri)
-        explainer_path = os.path.join(artifacts_path, 'explainer.dill')
+        explainer_path = os.path.join(artifacts_path, 'artifacts/explainer.dill')
         if explainer_path:
             with open(explainer_path, 'rb') as f:
                 explainer = dill.load(f)
