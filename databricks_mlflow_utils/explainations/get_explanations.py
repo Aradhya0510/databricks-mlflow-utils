@@ -575,7 +575,7 @@ class ConvertToPyFuncForExplanation:
                     signature=self.get_signature(),
                     input_example=self.input_example,
                     pip_requirements=pip_requirements,
-                    code_path=['.'],  # Include the current directory
+                    # code_path=['.'],  # Include the current directory
                     metadata={'model_flavor': self.model_flavor, 'model_uri': self.model_uri},
                 )
 
