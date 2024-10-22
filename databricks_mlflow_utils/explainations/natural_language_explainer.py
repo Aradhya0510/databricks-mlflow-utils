@@ -228,7 +228,6 @@ class NaturalLanguageExplainer:
         if self.llm_client:
             # Use LLM to generate explanation
             shap_info = top_features[['feature', 'mean_abs_shap']].to_dict('records')
-            shap_info = top_features[['feature', 'value', 'shap_value']].to_dict('records')
             
             # Improved prompt
             prompt = (
