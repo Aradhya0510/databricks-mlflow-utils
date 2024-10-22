@@ -576,6 +576,7 @@ class ConvertToPyFuncForExplanation:
                     input_example=self.input_example,
                     pip_requirements=pip_requirements,
                     # code_path=['.'],  # Include the current directory
+                    infer_code_paths=True,
                     metadata={'model_flavor': self.model_flavor, 'model_uri': self.model_uri},
                 )
 
