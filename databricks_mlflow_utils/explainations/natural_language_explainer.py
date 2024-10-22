@@ -234,27 +234,21 @@ import numpy as np
 
 #         return explanation
 
-import mlflow
 import pandas as pd
-import numpy as np
-import shap
-import dill
-import os
-
+import numpy as np 
 class NaturalLanguageExplainer:
-    def __init__(self, model_uri, llm_params=None):
+    def __init__(self, model, explainer, llm_params=None):
         """
         Initialize the NaturalLanguageExplainer.
 
         Parameters:
-        - model_uri: The MLflow model URI that contains both the model and the explainer.
+        - model: The underlying model (e.g., sklearn model).
+        - explainer: The SHAP explainer.
         - llm_params: Dictionary containing 'api_key', 'base_url', and 'model' for LLM.
         """
-        self.model_uri = model_uri
+        self.model = model
+        self.explainer = explainer
         self.llm_params = llm_params
-        self.model = self._load_model()
-        self.explainer = self._load_explainer()
-        self.underlying_model = self._get_underlying_model()
         self.is_regression = self._determine_if_regression()
         self.expected_value = self._get_expected_value()
 
@@ -278,43 +272,6 @@ class NaturalLanguageExplainer:
         self.llm_model_name = model_name
         return client
 
-    def _load_model(self):
-        """
-        Load the MLflow model from the model URI.
-
-        Returns:
-        - model: The loaded model.
-        """
-        model = mlflow.pyfunc.load_model(self.model_uri)
-        return model
-
-    def _load_explainer(self):
-        """
-        Load the SHAP explainer from the model's implementation.
-
-        Returns:
-        - explainer: The loaded SHAP explainer.
-        """
-        try:
-            explainer = self.model._model_impl.python_model.explainer
-            if explainer is None:
-                raise RuntimeError("SHAP explainer not loaded.")
-            return explainer
-        except AttributeError:
-            raise RuntimeError("Explainer not found in the model implementation.")
-
-    def _get_underlying_model(self):
-        """
-        Get the underlying model from the PyFunc model.
-
-        Returns:
-        - The underlying model object.
-        """
-        try:
-            return self.model._model_impl.python_model.model
-        except AttributeError:
-            raise RuntimeError("Underlying model not found in the model implementation.")
-
     def _determine_if_regression(self):
         """
         Determine if the model is for regression or classification.
@@ -322,7 +279,7 @@ class NaturalLanguageExplainer:
         Returns:
         - True if regression, False if classification.
         """
-        if hasattr(self.underlying_model, 'predict_proba'):
+        if hasattr(self.model, 'predict_proba'):
             return False  # Classification
         else:
             return True   # Regression
@@ -334,7 +291,6 @@ class NaturalLanguageExplainer:
         Returns:
         - The expected value as a scalar.
         """
-        # For SHAP, the expected_value can be a scalar or an array
         if isinstance(self.explainer.expected_value, (list, np.ndarray)):
             return np.mean(self.explainer.expected_value)
         else:
@@ -356,13 +312,6 @@ class NaturalLanguageExplainer:
     def _generate_shap_individual_explanation(self, instance, top_k):
         """
         Generate a SHAP-based natural language explanation for an individual instance.
-
-        Parameters:
-        - instance: A pandas Series or DataFrame row representing the instance.
-        - top_k: The number of top features to include in the explanation.
-
-        Returns:
-        - explanation: A string containing the natural language explanation.
         """
         # Ensure instance is a DataFrame
         if isinstance(instance, pd.Series):
@@ -388,7 +337,7 @@ class NaturalLanguageExplainer:
         # Handle multi-class scenario
         if len(shap_values.values.shape) == 3:
             # For multi-class, we'll use the SHAP values for the predicted class
-            classes = self.underlying_model.classes_
+            classes = self.model.classes_
             class_index = list(classes).index(prediction)
             shap_values_array = shap_values.values[0, :, class_index]
         else:
@@ -411,7 +360,7 @@ class NaturalLanguageExplainer:
         # Build explanation
         if self.llm_client:
             # Use LLM to generate explanation
-            shap_info = feature_contributions[['feature', 'value', 'shap_value']].to_dict('records')
+            shap_info = top_features[['feature', 'value', 'shap_value']].to_dict('records')
             prompt = f"Explain the model's prediction based on the following SHAP values:\n{shap_info}"
 
             response = self.llm_client.chat.completions.create(
@@ -463,13 +412,6 @@ class NaturalLanguageExplainer:
     def _generate_shap_global_explanation(self, data, top_k):
         """
         Generate a SHAP-based global natural language explanation.
-
-        Parameters:
-        - data: A pandas DataFrame used to compute the global explanations.
-        - top_k: The number of top features to include in the explanation.
-
-        Returns:
-        - explanation: A string containing the global natural language explanation.
         """
         # Compute SHAP values
         shap_values = self.explainer(data)

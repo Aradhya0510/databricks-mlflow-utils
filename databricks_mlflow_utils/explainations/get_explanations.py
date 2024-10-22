@@ -478,7 +478,7 @@ class ConvertToPyFuncForExplanation:
 
         # If NLE is True, generate explanations
         if self.NLE:
-            from .natural_language_explainer import NaturalLanguageExplainer
+            from natural_language_explainer import NaturalLanguageExplainer
 
             # Initialize llm_params (assuming environment variables are set)
             api_key = os.environ.get('LLM_API_KEY')
@@ -493,15 +493,21 @@ class ConvertToPyFuncForExplanation:
             else:
                 llm_params = None  # or handle accordingly
 
-            nle = NaturalLanguageExplainer(self.model_uri, llm_params=llm_params)
+            nle = NaturalLanguageExplainer(self.model, self.explainer, llm_params=llm_params)
             explanations = []
             for idx, row in self.input_example.iterrows():
                 explanation = nle.generate_individual_explanation(row)
                 explanations.append(explanation)
             output_df["explanations"] = explanations
 
+            # Generate global explanation
+            global_explanation = nle.generate_global_explanation(self.input_example)
+            # Include global explanation in the output DataFrame
+            output_df["global_explanation"] = [global_explanation] * len(output_df)
+
         # Now infer the signature
         return infer_signature(self.input_example, output_df)
+
 
     def convert(self, experiment_id=None):
         import mlflow
@@ -518,6 +524,33 @@ class ConvertToPyFuncForExplanation:
 
             # Define artifacts
             artifacts = {"explainer": explainer_path}
+
+            # If NLE is True, generate the global explanation and save it as an artifact
+            if self.NLE:
+                from natural_language_explainer import NaturalLanguageExplainer
+
+                # Initialize llm_params (assuming environment variables are set)
+                api_key = os.environ.get('LLM_API_KEY')
+                base_url = os.environ.get('LLM_BASE_URL')
+                model_name = os.environ.get('LLM_MODEL_NAME')
+                if api_key and base_url and model_name:
+                    llm_params = {
+                        'api_key': api_key,
+                        'base_url': base_url,
+                        'model': model_name
+                    }
+                else:
+                    llm_params = None  # or handle accordingly
+
+                nle = NaturalLanguageExplainer(self.model, self.explainer, llm_params=llm_params)
+                # Generate global explanation
+                global_explanation = nle.generate_global_explanation(self.input_example)
+                # Save the global explanation to a file
+                global_explanation_path = os.path.join(temp_dir, "global_explanation.txt")
+                with open(global_explanation_path, 'w') as f:
+                    f.write(global_explanation)
+                # Add to artifacts
+                artifacts["global_explanation"] = global_explanation_path
 
             # Get pip requirements
             pip_requirements = self.get_pip_requirements()
