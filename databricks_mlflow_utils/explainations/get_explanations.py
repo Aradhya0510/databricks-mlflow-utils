@@ -277,9 +277,8 @@ class PyFuncWrapper(mlflow.pyfunc.PythonModel):
         else:
             raise FileNotFoundError("Explainer artifact not found in the context.")
 
-        # If NLE is True, ensure NaturalLanguageExplainer is imported and get llm_params
+        # If NLE is True, get llm_params
         if self.NLE:
-            from .natural_language_explainer import NaturalLanguageExplainer
             # Read llm_params from environment variables
             api_key = os.environ.get('LLM_API_KEY')
             base_url = os.environ.get('LLM_BASE_URL')
@@ -310,7 +309,7 @@ class PyFuncWrapper(mlflow.pyfunc.PythonModel):
             raise ValueError(f"Model flavor '{self.model_flavor}' is not supported.")
         return loader(self.model_uri)
 
-    def predict(self, model_input):
+    def predict(self, context, model_input):
         import pandas as pd
 
         # Ensure model_input is a DataFrame
@@ -343,7 +342,7 @@ class PyFuncWrapper(mlflow.pyfunc.PythonModel):
         if self.NLE:
             from .natural_language_explainer import NaturalLanguageExplainer
 
-            nle = NaturalLanguageExplainer(self.model_uri, llm_params=self.llm_params)
+            nle = NaturalLanguageExplainer(self.model, self.explainer, llm_params=self.llm_params)
             explanations = []
             for idx, row in model_input.iterrows():
                 explanation = nle.generate_individual_explanation(row)
@@ -351,6 +350,7 @@ class PyFuncWrapper(mlflow.pyfunc.PythonModel):
             output_df["explanations"] = explanations
 
         return output_df
+
 
 class ConvertToPyFuncForExplanation:
     def __init__(self, model_uri, NLE=False):
