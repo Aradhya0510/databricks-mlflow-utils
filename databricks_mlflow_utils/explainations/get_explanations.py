@@ -1,19 +1,20 @@
 import mlflow
 import pandas as pd
 import mlflow.pyfunc
+from mlflow.tracking import MlflowClient
 import os
 import tempfile
 import logging
 from databricks_mlflow_utils.dependency_checker import DependencyChecker
 
 class PyFuncWrapper(mlflow.pyfunc.PythonModel):
-    def __init__(self, model_flavor, model_uri, NLE=False):
+    def __init__(self, model_flavor, model_uri, NLE=False, llm_params=None):
         self.model_flavor = model_flavor
         self.model_uri = model_uri
         self.model = None
         self.explainer = None
         self.NLE = NLE
-        self.llm_params = None  # Will be set in load_context if NLE is True
+        self.llm_params = llm_params  # Will be set in load_context if NLE is True
 
     def load_context(self, context):
         import shap
@@ -30,21 +31,6 @@ class PyFuncWrapper(mlflow.pyfunc.PythonModel):
                 self.explainer = dill.load(f)
         else:
             raise FileNotFoundError("Explainer artifact not found in the context.")
-
-        # If NLE is True, get llm_params
-        if self.NLE:
-            # Read llm_params from environment variables
-            api_key = os.environ.get('LLM_API_KEY')
-            base_url = os.environ.get('LLM_BASE_URL')
-            model_name = os.environ.get('LLM_MODEL_NAME')
-            if api_key and base_url and model_name:
-                self.llm_params = {
-                    'api_key': api_key,
-                    'base_url': base_url,
-                    'model': model_name
-                }
-            else:
-                self.llm_params = None
 
     def _load_model(self):
         # Load the model based on its flavor
@@ -107,7 +93,7 @@ class PyFuncWrapper(mlflow.pyfunc.PythonModel):
 
 
 class ConvertToPyFuncForExplanation:
-    def __init__(self, model_uri, NLE=False):
+    def __init__(self, model_uri, NLE=False, llm_params=None):
         self.model_uri = model_uri
         self.NLE = NLE
         self.model = None
@@ -115,6 +101,24 @@ class ConvertToPyFuncForExplanation:
         self.input_example = None
         self.explainer = None
         self.global_data = None
+
+        # Initialize llm_params (assuming environment variables are set)
+        api_key = os.environ.get('LLM_API_KEY')
+        base_url = os.environ.get('LLM_BASE_URL')
+        model_name = os.environ.get('LLM_MODEL_NAME')
+        if api_key and base_url and model_name and not llm_params:
+            self.llm_params = {
+                'api_key': api_key,
+                'base_url': base_url,
+                'model': model_name,
+                'max_tokens':200,  # Adjusted to accommodate the word limit
+                'temperature':0.7,  # Adjusted for creativity balance
+                'top_p':1,
+            }
+        elif llm_params:
+            self.llm_params = llm_params
+        else:
+            llm_params = None  # or handle accordingly
 
         #Initialize DependencyChecker and check/install dependencies
         dependency_checker = DependencyChecker(model_uri)
@@ -167,12 +171,11 @@ class ConvertToPyFuncForExplanation:
             self.input_example = None
 
     def create_explainer(self, data):
-        import shap
-
+        self.global_data = data
         # Ensure data is a DataFrame
         if not isinstance(data, pd.DataFrame):
             data = pd.DataFrame(data)
-            self.global_data = data
+            
         model_type = type(self.model).__name__
 
         # Handle models not supported by SHAP
@@ -205,6 +208,13 @@ class ConvertToPyFuncForExplanation:
             predict_function = lambda x: self.model.predict_proba(pd.DataFrame(x, columns=data.columns)) if hasattr(self.model, 'predict_proba') else self.model.predict(pd.DataFrame(x, columns=data.columns))
             return shap.KernelExplainer(predict_function, data)
 
+    def get_experiment_id(self):
+        client = MlflowClient()
+        run_id = self.model_uri.split("/")[-2]
+        run = client.get_run(run_id)
+        experiment_id = run.info.experiment_id
+        return experiment_id
+    
     def get_signature(self):
         from mlflow.models.signature import infer_signature
 
@@ -235,20 +245,7 @@ class ConvertToPyFuncForExplanation:
         if self.NLE:
             from .natural_language_explainer import NaturalLanguageExplainer
 
-            # Initialize llm_params (assuming environment variables are set)
-            api_key = os.environ.get('LLM_API_KEY')
-            base_url = os.environ.get('LLM_BASE_URL')
-            model_name = os.environ.get('LLM_MODEL_NAME')
-            if api_key and base_url and model_name:
-                llm_params = {
-                    'api_key': api_key,
-                    'base_url': base_url,
-                    'model': model_name
-                }
-            else:
-                llm_params = None  # or handle accordingly
-
-            nle = NaturalLanguageExplainer(self.model, self.explainer, llm_params=llm_params)
+            nle = NaturalLanguageExplainer(self.model, self.explainer, llm_params=self.llm_params)
             explanations = []
             for idx, row in self.input_example.iterrows():
                 explanation = nle.generate_individual_explanation(row)
@@ -264,7 +261,7 @@ class ConvertToPyFuncForExplanation:
         return infer_signature(self.input_example, output_df)
 
 
-    def convert(self, experiment_id=None):
+    def convert(self):
         import mlflow
         import dill
 
@@ -284,22 +281,9 @@ class ConvertToPyFuncForExplanation:
             if self.NLE:
                 from .natural_language_explainer import NaturalLanguageExplainer
 
-                # Initialize llm_params (assuming environment variables are set)
-                api_key = os.environ.get('LLM_API_KEY')
-                base_url = os.environ.get('LLM_BASE_URL')
-                model_name = os.environ.get('LLM_MODEL_NAME')
-                if api_key and base_url and model_name:
-                    llm_params = {
-                        'api_key': api_key,
-                        'base_url': base_url,
-                        'model': model_name
-                    }
-                else:
-                    llm_params = None  # or handle accordingly
-
-                nle = NaturalLanguageExplainer(self.model, self.explainer, llm_params=llm_params)
+                nle = NaturalLanguageExplainer(self.model, self.explainer, llm_params=self.llm_params)
                 # Generate global explanation
-                global_explanation = nle.generate_global_explanation(self.input_example)
+                global_explanation = nle.generate_global_explanation(self.global_data)
                 # Save the global explanation to a file
                 global_explanation_path = os.path.join(temp_dir, "global_explanation.txt")
                 with open(global_explanation_path, 'w') as f:
@@ -319,9 +303,9 @@ class ConvertToPyFuncForExplanation:
                     pip_requirements.append(package)
 
             # Create an instance of PyFuncWrapper
-            python_model = PyFuncWrapper(model_flavor=self.model_flavor, model_uri=self.model_uri, NLE=self.NLE)
+            python_model = PyFuncWrapper(model_flavor=self.model_flavor, model_uri=self.model_uri, NLE=self.NLE, llm_params=self.llm_params)
 
-            with mlflow.start_run(experiment_id=experiment_id) as mlflow_run:
+            with mlflow.start_run(experiment_id=self.get_experiment_id()) as mlflow_run:
                 # Log the PyFunc model
                 mlflow.pyfunc.log_model(
                     python_model=python_model,
@@ -330,7 +314,6 @@ class ConvertToPyFuncForExplanation:
                     signature=self.get_signature(),
                     input_example=self.input_example,
                     pip_requirements=pip_requirements,
-                    # code_path=['.'],  # Include the current directory
                     metadata={'model_flavor': self.model_flavor, 'model_uri': self.model_uri},
                 )
 

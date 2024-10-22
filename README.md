@@ -145,8 +145,23 @@ from databricks_mlflow_utils.explainations import get_explanations
 # Assuming you have a model logged in MLflow and you have its model URI
 model_uri = "runs:/<run_id>/model"
 
+# Set up environment variables for LLM parameters
+import os
+os.environ['LLM_API_KEY'] = 'your_api_key_here'
+os.environ['LLM_BASE_URL'] = 'https://your_llm_base_url'
+os.environ['LLM_MODEL_NAME'] = 'your_llm_model_name'
+
+# OR provide llm_params dict e.g.
+lm_params = {
+                'api_key': api_key,
+                'base_url': base_url,
+                'model': model_name,
+                'max_tokens':200,  # Adjusted to accommodate the word limit
+                'temperature':0.7,  # Adjusted for creativity balance
+                'top_p':1,
+            }
 # Create an instance of the converter with NLE=True to enable Natural Language Explanations
-converter = get_explanations.ConvertToPyFuncForExplanation(model_uri, NLE=True)
+converter = get_explanations.ConvertToPyFuncForExplanation(model_uri, NLE=True, llm_params=llm_params)
 
 # Prepare the dataset for the explainer (as in the previous example)
 # ...
@@ -160,12 +175,6 @@ result = converter.convert()
 # The result contains the URI of the converted model
 converted_model_uri = result["converted_model_uri"]
 print(f"Converted model URI: {converted_model_uri}")
-
-# Set up environment variables for LLM parameters
-import os
-os.environ['LLM_API_KEY'] = 'your_api_key_here'
-os.environ['LLM_BASE_URL'] = 'https://your_llm_base_url'
-os.environ['LLM_MODEL_NAME'] = 'your_llm_model_name'
 
 import mlflow
 
@@ -186,7 +195,7 @@ print(output)
 
 - The `model_uri` should point to the MLflow model you wish to convert.
 - The converted model will be logged to MLflow and can be accessed using the returned URI.
-- Ensure that the environment variables `LLM_API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL_NAME` are set appropriately for your LLM service.
+- Ensure that the environment variables `LLM_API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL_NAME` are set appropriately for your LLM service or provide a complete llm_params dict.
 - The package integrates with LLMs that follow the OpenAI API interface.
 
 ## How It Works
