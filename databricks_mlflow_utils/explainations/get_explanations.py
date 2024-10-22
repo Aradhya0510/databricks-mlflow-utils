@@ -171,12 +171,11 @@ class ConvertToPyFuncForExplanation:
             self.input_example = None
 
     def create_explainer(self, data):
-        import shap
-
+        self.global_data = data
         # Ensure data is a DataFrame
         if not isinstance(data, pd.DataFrame):
             data = pd.DataFrame(data)
-            self.global_data = data
+            
         model_type = type(self.model).__name__
 
         # Handle models not supported by SHAP
