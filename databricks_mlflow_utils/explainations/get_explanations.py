@@ -279,7 +279,7 @@ class PyFuncWrapper(mlflow.pyfunc.PythonModel):
 
         # If NLE is True, ensure NaturalLanguageExplainer is imported and get llm_params
         if self.NLE:
-            from natural_language_explainer import NaturalLanguageExplainer
+            from .natural_language_explainer import NaturalLanguageExplainer
             # Read llm_params from environment variables
             api_key = os.environ.get('LLM_API_KEY')
             base_url = os.environ.get('LLM_BASE_URL')
@@ -341,7 +341,7 @@ class PyFuncWrapper(mlflow.pyfunc.PythonModel):
 
         # If NLE is True, generate natural language explanations
         if self.NLE:
-            from natural_language_explainer import NaturalLanguageExplainer
+            from .natural_language_explainer import NaturalLanguageExplainer
 
             nle = NaturalLanguageExplainer(self.model_uri, llm_params=self.llm_params)
             explanations = []
@@ -478,7 +478,7 @@ class ConvertToPyFuncForExplanation:
 
         # If NLE is True, generate explanations
         if self.NLE:
-            from natural_language_explainer import NaturalLanguageExplainer
+            from .natural_language_explainer import NaturalLanguageExplainer
 
             # Initialize llm_params (assuming environment variables are set)
             api_key = os.environ.get('LLM_API_KEY')
@@ -527,7 +527,7 @@ class ConvertToPyFuncForExplanation:
 
             # If NLE is True, generate the global explanation and save it as an artifact
             if self.NLE:
-                from natural_language_explainer import NaturalLanguageExplainer
+                from .natural_language_explainer import NaturalLanguageExplainer
 
                 # Initialize llm_params (assuming environment variables are set)
                 api_key = os.environ.get('LLM_API_KEY')
