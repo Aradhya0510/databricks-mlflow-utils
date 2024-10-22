@@ -11,7 +11,7 @@ class NaturalLanguageExplainer:
         self.expected_value = self._get_expected_value()
 
         if self.llm_params:
-            self._initialize_llm_client()
+            self.llm_client = self._initialize_llm_client()
         else:
             self.llm_client = None
 
