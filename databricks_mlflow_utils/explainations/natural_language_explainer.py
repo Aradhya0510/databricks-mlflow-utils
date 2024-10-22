@@ -36,9 +36,9 @@ class NaturalLanguageExplainer:
             base_url=base_url
         )
         self.llm_model_name = model_name
-        self.max_tokens=self.llm_params.get('max_tokens', 256),  # Adjusted to accommodate the word limit
-        self.temperature=self.llm_params.get('temprature', 0.5),  # Adjusted for creativity balance
-        self.top_p=self.llm_params.get('top_p', 1),
+        self.max_tokens=self.llm_params.get('max_tokens'),  # Adjusted to accommodate the word limit
+        self.temperature=self.llm_params.get('temprature'),  # Adjusted for creativity balance
+        self.top_p=self.llm_params.get('top_p'),
         # frequency_penalty=0,
         # presence_penalty=0
         return client
