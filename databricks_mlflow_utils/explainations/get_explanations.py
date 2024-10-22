@@ -310,7 +310,7 @@ class PyFuncWrapper(mlflow.pyfunc.PythonModel):
             raise ValueError(f"Model flavor '{self.model_flavor}' is not supported.")
         return loader(self.model_uri)
 
-    def predict(self, context, model_input):
+    def predict(self, model_input):
         import pandas as pd
 
         # Ensure model_input is a DataFrame
