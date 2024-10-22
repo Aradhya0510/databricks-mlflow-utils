@@ -1,6 +1,7 @@
 import mlflow
 import pandas as pd
 import mlflow.pyfunc
+from mlflow.tracking import MlflowClient
 import os
 import tempfile
 import logging
@@ -13,7 +14,7 @@ class PyFuncWrapper(mlflow.pyfunc.PythonModel):
         self.model = None
         self.explainer = None
         self.NLE = NLE
-        self.llm_params = None  # Will be set in load_context if NLE is True
+        self.llm_params = llm_params  # Will be set in load_context if NLE is True
 
     def load_context(self, context):
         import shap
@@ -208,6 +209,13 @@ class ConvertToPyFuncForExplanation:
             predict_function = lambda x: self.model.predict_proba(pd.DataFrame(x, columns=data.columns)) if hasattr(self.model, 'predict_proba') else self.model.predict(pd.DataFrame(x, columns=data.columns))
             return shap.KernelExplainer(predict_function, data)
 
+    def get_experiment_id(self):
+        client = MlflowClient()
+        run_id = self.model_uri.split("/")[-2]
+        run = client.get_run(run_id)
+        experiment_id = run.info.experiment_id
+        return experiment_id
+    
     def get_signature(self):
         from mlflow.models.signature import infer_signature
 
@@ -254,7 +262,7 @@ class ConvertToPyFuncForExplanation:
         return infer_signature(self.input_example, output_df)
 
 
-    def convert(self, experiment_id=None):
+    def convert(self):
         import mlflow
         import dill
 
@@ -276,7 +284,7 @@ class ConvertToPyFuncForExplanation:
 
                 nle = NaturalLanguageExplainer(self.model, self.explainer, llm_params=self.llm_params)
                 # Generate global explanation
-                global_explanation = nle.generate_global_explanation(self.input_example)
+                global_explanation = nle.generate_global_explanation(self.global_data)
                 # Save the global explanation to a file
                 global_explanation_path = os.path.join(temp_dir, "global_explanation.txt")
                 with open(global_explanation_path, 'w') as f:
@@ -298,7 +306,7 @@ class ConvertToPyFuncForExplanation:
             # Create an instance of PyFuncWrapper
             python_model = PyFuncWrapper(model_flavor=self.model_flavor, model_uri=self.model_uri, NLE=self.NLE, llm_params=self.llm_params)
 
-            with mlflow.start_run(experiment_id=experiment_id) as mlflow_run:
+            with mlflow.start_run(experiment_id=self.get_experiment_id()) as mlflow_run:
                 # Log the PyFunc model
                 mlflow.pyfunc.log_model(
                     python_model=python_model,
@@ -307,7 +315,6 @@ class ConvertToPyFuncForExplanation:
                     signature=self.get_signature(),
                     input_example=self.input_example,
                     pip_requirements=pip_requirements,
-                    # code_path=['.'],  # Include the current directory
                     metadata={'model_flavor': self.model_flavor, 'model_uri': self.model_uri},
                 )
 

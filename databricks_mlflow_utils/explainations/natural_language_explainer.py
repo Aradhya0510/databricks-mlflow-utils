@@ -1,44 +1,36 @@
-import mlflow
+from openai import OpenAI
 import pandas as pd
 import numpy as np
 
 class NaturalLanguageExplainer:
     def __init__(self, model, explainer, llm_params=None):
-        """
-        Initialize the NaturalLanguageExplainer.
-
-        Parameters:
-        - model: The underlying model (e.g., sklearn model).
-        - explainer: The SHAP explainer.
-        - llm_params: Dictionary containing 'api_key', 'base_url', and 'model' for LLM.
-        """
         self.model = model
         self.explainer = explainer
         self.llm_params = llm_params
         self.is_regression = self._determine_if_regression()
         self.expected_value = self._get_expected_value()
 
-        # Initialize LLM client if llm_params are provided
         if self.llm_params:
-            self.llm_client = self._initialize_llm_client()
+            self._initialize_llm_client()
         else:
             self.llm_client = None
 
     def _initialize_llm_client(self):
-        from openai import OpenAI
         api_key = self.llm_params.get('api_key')
         base_url = self.llm_params.get('base_url')
         model_name = self.llm_params.get('model')
         if not api_key or not base_url or not model_name:
             raise ValueError("LLM parameters 'api_key', 'base_url', and 'model' must be provided.")
+        # openai.api_key = api_key
+        # openai.api_base = base_url
         client = OpenAI(
             api_key=api_key,
             base_url=base_url
         )
         self.llm_model_name = model_name
-        self.max_tokens=self.llm_params.get('max_tokens'),  # Adjusted to accommodate the word limit
-        self.temperature=self.llm_params.get('temprature'),  # Adjusted for creativity balance
-        self.top_p=self.llm_params.get('top_p'),
+        self.max_tokens = self.llm_params.get('max_tokens', 150)
+        self.temperature = self.llm_params.get('temperature', 0.7)
+        self.top_p = self.llm_params.get('top_p', 1.0)
         # frequency_penalty=0,
         # presence_penalty=0
         return client
